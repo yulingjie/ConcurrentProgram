@@ -3,8 +3,12 @@
 
 int main(int argc, char** argv)
 {
-    int listenfd, connfd;
-    pid_t childpid; 
+    int i = -1, maxi = -1;
+    int maxfd,listenfd, connfd, sockfd;
+    int nready, client[FD_SETSIZE];
+    ssize_t n;
+    fd_set rset, allset;
+    char buf[MAXLINE];
     socklen_t clilen; 
     struct sockaddr_in cliaddr, servaddr;
     
@@ -18,17 +22,69 @@ int main(int argc, char** argv)
     Bind(listenfd, (SA*) &servaddr, sizeof(servaddr));
 
     Listen(listenfd, LISTENQ);
+
+    maxfd = listenfd;
+    maxi = -1;    
+    for(i = 0; i < FD_SETSIZE; ++i)
+        client[i] = -1;
+
+    FD_ZERO(&allset);
+    FD_SET(listenfd, &allset);
+
     for(;;)
     {
-        clilen = sizeof(cliaddr);
-        connfd = Accept(listenfd, (SA*) &cliaddr, &clilen);
+        rset = allset;
+        nready = Select(maxfd + 1, &rset, NULL, NULL, NULL);
 
-        if((childpid = Fork()) == 0){
-            Close(listenfd);
-            echo(connfd);
-            exit(0);
+        // if listenfd is selected
+        if(FD_ISSET(listenfd, &rset)){
+           clilen = sizeof(cliaddr); 
+
+           connfd = Accept(listenfd, (SA*) &cliaddr, &clilen);
+
+           for(i = 0; i < FD_SETSIZE; ++i)
+           {
+               if(client[i] < 0)
+               {
+                    client[i] = connfd;
+                    break;
+               }
+           }
+
+           if(i == FD_SETSIZE)
+               err_quit("too many clients");
+
+           FD_SET(connfd, &allset);
+
+           if(connfd > maxfd)
+               maxfd = connfd;
+
+           if(i > maxi)
+               maxi = i;
+
+           fprintf(stdout, "accept fd %d, index %d\n", connfd,i);
         }
-        Close(connfd);
+        for( i = 0; i <= maxi; ++i){
+           if((sockfd = client[i]) <0) continue;
+           
+           if(FD_ISSET(sockfd, &rset)){
+                if((n = Read(sockfd, buf, MAXLINE)) == 0)
+                {
+                    fprintf(stdout,"close fd %d, index %d\n", sockfd, i);
+                    Close(sockfd);
+                    FD_CLR(sockfd, &allset);
+                    client[i] = -1;
+                }
+                else
+                {
+                    printf("write echo %s", buf);
+                    Writen(sockfd, buf, n);
+                }
+
+                if(--nready <= 0)
+                    break;
+           }
+        }
     }
 }
 
