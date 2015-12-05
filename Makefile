@@ -1,9 +1,9 @@
 CC = gcc
-LDFLAGS = -lunp
+LDFLAGS = -lunp -lpthread
 SRC_DIR = src
 OBJ_DIR = obj
 BIN_DIR = bin
-CFLAGS = -Wall
+CFLAGS = -Wall -pthread
 
 all: cli svr 
 

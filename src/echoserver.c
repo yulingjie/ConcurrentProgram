@@ -1,14 +1,15 @@
 #include "Utility.h"
 #include<unp.h>
-
+void * thread(void *vargp);
 
 int main(int argc, char** argv)
 {
-    int listenfd, connfd;
+    int listenfd;
+    int *pConnfd;
     socklen_t clilen; 
     struct sockaddr_in cliaddr, servaddr;
-    static pool pool;
-    
+    pthread_t tid; 
+
     listenfd = Socket(AF_INET, SOCK_STREAM, 0);
 
     bzero(&servaddr, sizeof(servaddr)); 
@@ -19,22 +20,21 @@ int main(int argc, char** argv)
     Bind(listenfd, (SA*) &servaddr, sizeof(servaddr));
 
     Listen(listenfd, LISTENQ);
-    init_pool(listenfd, &pool);
 
     for(;;)
     {
-        pool.ready_set = pool.read_set;
-        pool.nready = Select(pool.maxfd + 1,&pool.ready_set, NULL, NULL, NULL);
-
-        // if listenfd is selected
-        if(FD_ISSET(listenfd, &pool.ready_set)){
-           clilen = sizeof(cliaddr); 
-           connfd = Accept(listenfd, (SA*) &cliaddr, &clilen);
-
-           add_client(connfd, &pool);
-        }
-
-       check_clients(&pool); 
+      pConnfd = Malloc(sizeof(int)); 
+      *pConnfd = Accept(listenfd, (SA*) &cliaddr, &clilen);
+      pthread_create(&tid, NULL, thread, pConnfd);
     }
 }
 
+void * thread(void *vargp)
+{
+    int connfd = *((int*)vargp);
+    pthread_detach(pthread_self());
+    free(vargp);
+    echo(connfd);
+    Close(connfd);
+    return NULL;
+}
